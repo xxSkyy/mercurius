@@ -1,3 +1,6 @@
+# This fork has implemented Queies/Mutations over websocket with JWT authorization on connection
+## You can execute queries/mutations over http and websockets in same way
+
 # mercurius
 
 ![CI workflow](https://github.com/mercurius-js/mercurius/workflows/CI%20workflow/badge.svg)
