@@ -17,10 +17,11 @@ const importer = {
 }
 
 function render () {
-  async function fetcher (params) {
+  async function fetcher (params, opts) {
     const res = await fetch(window.GRAPHQL_ENDPOINT, {
       method: 'post',
       headers: {
+        ...opts.headers,
         Accept: 'application/json',
         'Content-Type': 'application/json'
       },
@@ -32,7 +33,11 @@ function render () {
   }
 
   ReactDOM.render(
-    React.createElement(GraphiQL, { fetcher }),
+    React.createElement(GraphiQL, {
+      fetcher,
+      headerEditorEnabled: true,
+      shouldPersistHeaders: true
+    }),
     document.getElementById('main')
   )
 }
