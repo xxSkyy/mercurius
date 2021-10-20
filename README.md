@@ -43,7 +43,9 @@ Features:
 ## Install
 
 ```bash
-npm i fastify mercurius
+npm i fastify mercurius graphql
+# or
+yarn add fastify mercurius graphql
 ```
 
 The previous name of this module was [fastify-gql](http://npm.im/fastify-gql) (< 6.0.0).

@@ -10,8 +10,6 @@ import {
   GraphQLSchema,
   Source,
   GraphQLResolveInfo,
-  GraphQLIsTypeOfFn,
-  GraphQLTypeResolver,
   GraphQLScalarType,
   ValidationRule,
 } from "graphql";
@@ -31,6 +29,10 @@ export interface MercuriusContext {
    * __Caution__: Only available if `subscriptions` are enabled
    */
   pubsub: PubSub;
+}
+
+export interface MercuriusError<TError extends Error = Error> extends FastifyError {
+  errors?: TError[]
 }
 
 export interface Loader<
@@ -229,7 +231,7 @@ interface Gateway {
   serviceMap: Record<string, ServiceConfig>;
 }
 
-interface MercuriusPlugin {
+export interface MercuriusPlugin {
   <
     TData extends Record<string, any> = Record<string, any>,
     TVariables extends Record<string, any> = Record<string, any>
@@ -426,8 +428,8 @@ export interface MercuriusCommonOptions {
   /**
    * Serve GraphiQL on /graphiql if true or 'graphiql' and if routes is true
    */
-  graphiql?: boolean | string;
-  ide?: boolean | string;
+  graphiql?: boolean | 'graphiql';
+  ide?: boolean | 'graphiql';
   /**
    * The minimum number of execution a query needs to be executed before being jit'ed.
    * @default true
@@ -459,12 +461,12 @@ export interface MercuriusCommonOptions {
   defineMutation?: boolean;
   /**
    * Change the default error handler (Default: true).
-   * If a custom error handler is defined, it should return the standardized response format according to [GraphQL spec](https://graphql.org/learn/serving-over-http/#response).
+   * If a custom error handler is defined, it should send the standardized response format according to [GraphQL spec](https://graphql.org/learn/serving-over-http/#response) using `reply.send`.
    * @default true
    */
   errorHandler?:
     | boolean
-    | ((error: FastifyError, request: FastifyRequest, reply: FastifyReply) => ExecutionResult);
+    | ((error: MercuriusError, request: FastifyRequest, reply: FastifyReply) => void | Promise<void>);
   /**
    * Change the default error formatter.
    */
@@ -590,11 +592,12 @@ declare namespace mercurius {
    * Extended errors for adding additional information in error responses
    */
   class ErrorWithProps extends Error {
-    constructor(message: string, extensions?: object);
+    constructor(message: string, extensions?: object, statusCode?: number);
     /**
      * Custom additional properties of this error
      */
     extensions?: object;
+    statusCode?: number;
   }
 
   /**

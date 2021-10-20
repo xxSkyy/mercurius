@@ -6,13 +6,57 @@ const FakeTimers = require('@sinonjs/fake-timers')
 const SubscriptionClient = require('../lib/subscription-client')
 const WS = require('ws')
 
+test('subscription client initialization fails when a not supported protocol is in the options', (t) => {
+  t.plan(1)
+  t.throws(() => new SubscriptionClient('ws://localhost:1234', {
+    protocols: ['unsupported-protocol'],
+    serviceName: 'test-service'
+  }), 'Invalid options: unsupported-protocol is not a valid gateway subscription protocol')
+})
+
 test('subscription client calls the publish method with the correct payload', (t) => {
   const server = new WS.Server({ port: 0 })
   const port = server.address().port
 
   server.on('connection', function connection (ws) {
-    ws.on('message', function incoming (message) {
-      const data = JSON.parse(message)
+    ws.on('message', function incoming (message, isBinary) {
+      const data = JSON.parse(isBinary ? message : message.toString())
+      if (data.type === 'connection_init') {
+        ws.send(JSON.stringify({ id: undefined, type: 'connection_ack' }))
+      } else if (data.type === 'subscribe') {
+        ws.send(JSON.stringify({ id: '1', type: 'next', payload: { data: { foo: 'bar' } } }))
+      }
+    })
+  })
+
+  const client = new SubscriptionClient(`ws://localhost:${port}`, {
+    reconnect: true,
+    maxReconnectAttempts: 10,
+    serviceName: 'test-service',
+    protocols: ['graphql-transport-ws'],
+    connectionCallback: () => {
+      client.createSubscription('query', {}, (data) => {
+        t.same(data, {
+          topic: 'test-service_1',
+          payload: {
+            foo: 'bar'
+          }
+        })
+        client.close()
+        server.close()
+        t.end()
+      })
+    }
+  })
+})
+
+test('subscription client calls the publish method with the correct payload', (t) => {
+  const server = new WS.Server({ port: 0 })
+  const port = server.address().port
+
+  server.on('connection', function connection (ws) {
+    ws.on('message', function incoming (message, isBinary) {
+      const data = JSON.parse(isBinary ? message : message.toString())
       if (data.type === 'connection_init') {
         ws.send(JSON.stringify({ id: undefined, type: 'connection_ack' }))
       } else if (data.type === 'start') {
@@ -46,8 +90,8 @@ test('subscription client calls the publish method with null after GQL_COMPLETE 
   const port = server.address().port
 
   server.on('connection', function connection (ws) {
-    ws.on('message', function incoming (message) {
-      const data = JSON.parse(message)
+    ws.on('message', function incoming (message, isBinary) {
+      const data = JSON.parse(isBinary ? message : message.toString())
       if (data.type === 'connection_init') {
         ws.send(JSON.stringify({ id: undefined, type: 'connection_ack' }))
       } else if (data.type === 'start') {
@@ -99,13 +143,16 @@ test('subscription client tries to reconnect when server closes', (t) => {
   function connectionCallback () {
     if (shouldCloseServer) {
       server.close()
+      for (const ws of server.clients) {
+        ws.terminate()
+      }
       shouldCloseServer = false
       server = new WS.Server({ port }, () => {
         createSubscription()
       })
       server.on('connection', function connection (ws) {
-        ws.on('message', (message) => {
-          const data = JSON.parse(message)
+        ws.on('message', function incoming (message, isBinary) {
+          const data = JSON.parse(isBinary ? message : message.toString())
           if (data.type === 'connection_init') {
             ws.send(JSON.stringify({ id: undefined, type: 'connection_ack' }))
           } else if (data.type === 'start') {
@@ -150,8 +197,8 @@ test('subscription client multiple subscriptions is handled by one operation', t
   const port = server.address().port
 
   server.on('connection', function connection (ws) {
-    ws.on('message', function incoming (message) {
-      const data = JSON.parse(message)
+    ws.on('message', function incoming (message, isBinary) {
+      const data = JSON.parse(isBinary ? message : message.toString())
       if (data.type === 'connection_init') {
         ws.send(JSON.stringify({ id: undefined, type: 'connection_ack' }))
       } else if (data.type === 'start') {
@@ -182,8 +229,8 @@ test('subscription client multiple subscriptions unsubscribe removes only one su
   const port = server.address().port
 
   server.on('connection', function connection (ws) {
-    ws.on('message', function incoming (message) {
-      const data = JSON.parse(message)
+    ws.on('message', function incoming (message, isBinary) {
+      const data = JSON.parse(isBinary ? message : message.toString())
       if (data.type === 'stop') {
         ws.send(JSON.stringify({ id: '1', type: 'complete' }))
       }
@@ -220,8 +267,8 @@ test('subscription client closes the connection after GQL_CONNECTION_ERROR type 
   const port = server.address().port
 
   server.on('connection', function connection (ws) {
-    ws.on('message', function incoming (message) {
-      const data = JSON.parse(message)
+    ws.on('message', function incoming (message, isBinary) {
+      const data = JSON.parse(isBinary ? message : message.toString())
       if (data.type === 'connection_init') {
         ws.send(JSON.stringify({ id: '1', type: 'connection_error' }))
       }
@@ -248,8 +295,8 @@ test('subscription client connectionInitPayload is correctly passed', (t) => {
   const port = server.address().port
 
   server.on('connection', function connection (ws) {
-    ws.on('message', function incoming (message) {
-      const data = JSON.parse(message)
+    ws.on('message', function incoming (message, isBinary) {
+      const data = JSON.parse(isBinary ? message : message.toString())
       if (data.type === 'connection_init') {
         t.same(data.payload, connectionInitPayload)
         client.close()
@@ -294,8 +341,8 @@ test('subscription client sending empty object payload on connection init', (t) 
   const port = server.address().port
 
   server.on('connection', function connection (ws) {
-    ws.on('message', function incoming (message) {
-      const data = JSON.parse(message)
+    ws.on('message', function incoming (message, isBinary) {
+      const data = JSON.parse(isBinary ? message : message.toString())
       if (data.type === 'connection_init') {
         t.same(data.payload, {})
         ws.send(JSON.stringify({ id: '1', type: 'complete' }))
@@ -329,8 +376,8 @@ test('subscription client not throwing error on GQL_CONNECTION_KEEP_ALIVE type p
   })
 
   server.on('connection', function connection (ws) {
-    ws.on('message', function incoming (message) {
-      const data = JSON.parse(message)
+    ws.on('message', function incoming (message, isBinary) {
+      const data = JSON.parse(isBinary ? message : message.toString())
       if (data.type === 'start') {
         ws.send(JSON.stringify({ id: '1', type: 'complete' }))
       }
@@ -369,8 +416,8 @@ test('subscription client should throw on createSubscription if connection is no
   const port = server.address().port
 
   server.on('connection', function connection (ws) {
-    ws.on('message', function incoming (message) {
-      const data = JSON.parse(message)
+    ws.on('message', function incoming (message, isBinary) {
+      const data = JSON.parse(isBinary ? message : message.toString())
       if (data.type === 'connection_init') {
         ws.send(JSON.stringify({ id: undefined, type: 'connection_error' }))
       }
@@ -400,8 +447,8 @@ test('subscription client should pass the error payload to failedConnectionCallb
   const errorPayload = { message: 'error' }
 
   server.on('connection', function connection (ws) {
-    ws.on('message', function incoming (message) {
-      const data = JSON.parse(message)
+    ws.on('message', function incoming (message, isBinary) {
+      const data = JSON.parse(isBinary ? message : message.toString())
       if (data.type === 'connection_init') {
         ws.send(JSON.stringify({ id: undefined, type: 'connection_error', payload: errorPayload }))
       }
