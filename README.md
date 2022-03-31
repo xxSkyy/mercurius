@@ -1,5 +1,4 @@
-# This fork has implemented Queies/Mutations over websocket with JWT authorization on connection
-## You can execute queries/mutations over http and websockets in same way
+![Mercurius Logo](https://github.com/mercurius-js/graphics/blob/main/mercurius-horizontal.svg)
 
 # mercurius
 
@@ -37,6 +36,7 @@ Features:
 - [Integrations](docs/integrations/)
 - [Related Plugins](docs/plugins.md)
 - [Protocol Extensions](/docs/protocol-extension.md)
+- [Faq](/docs/faq.md)
 - [Acknowledgements](#acknowledgements)
 - [License](#license)
 
@@ -53,10 +53,10 @@ The previous name of this module was [fastify-gql](http://npm.im/fastify-gql) (<
 ## Quick Start
 
 ```js
-'use strict'
+"use strict"
 
-const Fastify = require('fastify')
-const mercurius = require('mercurius')
+const Fastify = require("fastify")
+const mercurius = require("mercurius")
 
 const app = Fastify()
 
@@ -68,17 +68,17 @@ const schema = `
 
 const resolvers = {
   Query: {
-    add: async (_, { x, y }) => x + y
-  }
+    add: async (_, { x, y }) => x + y,
+  },
 }
 
 app.register(mercurius, {
   schema,
-  resolvers
+  resolvers,
 })
 
-app.get('/', async function (req, reply) {
-  const query = '{ add(x: 2, y: 2) }'
+app.get("/", async function (req, reply) {
+  const query = "{ add(x: 2, y: 2) }"
   return reply.graphql(query)
 })
 

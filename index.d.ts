@@ -380,7 +380,7 @@ interface WsConnectionParams {
 
 export interface MercuriusGatewayService {
   name: string;
-  url: string;
+  url: string | string[];
   schema?: string;
   wsUrl?: string;
   mandatory?: boolean;
@@ -786,6 +786,7 @@ type ValidationRules =
     }) => ValidationRule[]);
 
 export interface PreExecutionHookResponse<TError extends Error> {
+  schema?: GraphQLSchema
   document?: DocumentNode
   errors?: TError[]
 }

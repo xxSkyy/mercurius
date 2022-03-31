@@ -323,6 +323,22 @@ gateway.register(mercurius, {
   }
 })
 
+// Gateway mode with load balanced services
+gateway.register(mercurius, {
+  gateway: {
+    services: [
+      {
+        name: 'user',
+        url: ['http://localhost:4001/graphql', 'http://localhost:4002/graphql']
+      },
+      {
+        name: 'post',
+        url: 'http://localhost:4003/graphql'
+      }
+    ]
+  }
+})
+
 // Executable schema
 
 const executableSchema = makeExecutableSchema({
@@ -521,6 +537,7 @@ app.graphql.addHook('preExecution', async function (schema, document, context) {
   expectAssignable<DocumentNode>(document)
   expectAssignable<MercuriusContext>(context)
   return {
+    schema,
     document,
     errors: [
       new Error('foo')
