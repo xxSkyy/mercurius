@@ -122,6 +122,8 @@ const plugin = fp(async function (app, opts) {
   let subscriptionContextFn
   let onConnect
   let onDisconnect
+  let keepAlive
+  let fullWsTransport
 
   if (typeof subscriptionOpts === 'object') {
     if (subscriptionOpts.pubsub) {
@@ -134,6 +136,8 @@ const plugin = fp(async function (app, opts) {
     subscriptionContextFn = subscriptionOpts.context
     onConnect = subscriptionOpts.onConnect
     onDisconnect = subscriptionOpts.onDisconnect
+    keepAlive = subscriptionOpts.keepAlive
+    fullWsTransport = subscriptionOpts.fullWsTransport
   } else if (subscriptionOpts === true) {
     emitter = mq()
     subscriber = new PubSub(emitter)
@@ -173,8 +177,48 @@ const plugin = fp(async function (app, opts) {
   }
 
   let entityResolversFactory
+  let gatewayRetryIntervalTimer = null
+  const retryServicesCount = gateway && gateway.retryServicesCount ? gateway.retryServicesCount : 10
+
+  const retryServices = (interval) => {
+    let retryCount = 0
+    let isRetry = true
+
+    return setInterval(async () => {
+      try {
+        if (retryCount === retryServicesCount) {
+          clearInterval(gatewayRetryIntervalTimer)
+          isRetry = false
+        }
+        retryCount++
+
+        const context = assignApplicationLifecycleHooksToContext({}, fastifyGraphQl[kHooks])
+        const schema = await gateway.refresh(isRetry)
+        if (schema !== null) {
+          clearInterval(gatewayRetryIntervalTimer)
+          // Trigger onGatewayReplaceSchema hook
+          if (context.onGatewayReplaceSchema !== null) {
+            await onGatewayReplaceSchemaHandler(context, { instance: app, schema })
+          }
+          fastifyGraphQl.replaceSchema(schema)
+        }
+      } catch (error) {
+        app.log.error(error)
+      }
+    }, interval)
+  }
+
   if (gateway) {
+    const retryInterval = gateway.retryServicesInterval || 3000
     gateway = await buildGateway(gateway, app)
+
+    const serviceMap = Object.values(gateway.serviceMap)
+    const failedMandatoryServices = serviceMap.filter(service => !!service.error && service.mandatory)
+
+    if (failedMandatoryServices.length) {
+      gatewayRetryIntervalTimer = retryServices(retryInterval)
+      gatewayRetryIntervalTimer.unref()
+    }
 
     schema = gateway.schema
     entityResolversFactory = gateway.entityResolversFactory
@@ -207,6 +251,9 @@ const plugin = fp(async function (app, opts) {
       gateway.close()
       if (gatewayInterval !== null) {
         clearInterval(gatewayInterval)
+      }
+      if (gatewayRetryIntervalTimer !== null) {
+        clearInterval(gatewayRetryIntervalTimer)
       }
       setImmediate(next)
     })
@@ -246,7 +293,9 @@ const plugin = fp(async function (app, opts) {
       onDisconnect,
       lruGatewayResolvers,
       entityResolversFactory,
-      subscriptionContextFn
+      subscriptionContextFn,
+      keepAlive,
+      fullWsTransport
     })
   }
 
@@ -259,7 +308,9 @@ const plugin = fp(async function (app, opts) {
 
     context = Object.assign(context, { reply: this, app })
     if (app[kFactory]) {
-      this[kLoaders] = app[kFactory].create(context)
+      if (!opts.allowBatchedQueries || !this[kLoaders]) {
+        this[kLoaders] = app[kFactory].create(context)
+      }
     }
 
     return app.graphql(source, context, variables, operationName)
@@ -535,7 +586,14 @@ const plugin = fp(async function (app, opts) {
     const shouldCompileJit = cached && cached.count++ === minJit
     // Validate variables
     if (variables !== undefined && !shouldCompileJit) {
-      const executionContext = buildExecutionContext(fastifyGraphQl.schema, document, root, context, variables, operationName)
+      const executionContext = buildExecutionContext({
+        schema: fastifyGraphQl.schema,
+        document,
+        rootValue: root,
+        contextValue: context,
+        variableValues: variables,
+        operationName
+      })
       if (Array.isArray(executionContext)) {
         const err = new MER_ERR_GQL_VALIDATION()
         err.errors = executionContext
@@ -566,14 +624,14 @@ const plugin = fp(async function (app, opts) {
       return maybeFormatErrors(execution, context)
     }
 
-    const execution = await execute(
-      modifiedSchema || fastifyGraphQl.schema,
-      modifiedDocument || document,
-      root,
-      context,
-      variables,
+    const execution = await execute({
+      schema: modifiedSchema || fastifyGraphQl.schema,
+      document: modifiedDocument || document,
+      rootValue: root,
+      contextValue: context,
+      variableValues: variables,
       operationName
-    )
+    })
 
     return maybeFormatErrors(execution, context)
   }

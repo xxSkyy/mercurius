@@ -59,6 +59,8 @@
   - `subscription.context`: `Function` Result of function is passed to subscription resolvers as a custom GraphQL context. The function receives the `connection` and `request` as parameters.
   - `subscription.onConnect`: `Function` A function which can be used to validate the `connection_init` payload. If defined it should return a truthy value to authorize the connection. If it returns an object the subscription context will be extended with the returned object.
   - `subscription.onDisconnect`: `Function` A function which is called with the subscription context of the connection after the connection gets disconnected.
+  - `subscription.keepAlive`: `Integer` Optional interval in ms to send the `GQL_CONNECTION_KEEP_ALIVE` message.
+  - `subscription.fullWsTransport`: `Boolean` Enable sending every operation via WS.
 - `federationMetadata`: Boolean. Enable federation metadata support so the service can be deployed behind an Apollo Gateway
 - `gateway`: Object. Run the GraphQL server in gateway mode.
 
@@ -70,6 +72,7 @@
     - `service.rewriteHeaders`: `Function` A function that gets the original headers as a parameter and returns an object containing values that should be added to the headers
     - `service.initHeaders`: `Function` or `Object` An object or a function that returns the headers sent to the service for the initial \_service SDL query.
     - `service.connections`: The number of clients to create. (Default: `10`)
+    - `service.agent`: An optional, fully configured [undici](https://github.com/nodejs/undici) agent/pool instance to use to perform network requests. If used, you must set all connections options on the instance as the request related options from the `service` configuration will not be applied.
     - `service.bodyTimeout`: The timeout after which a request will time out, in milliseconds. (Default: `30e3` - 30 seconds)
     - `service.headersTimeout`: The amount of time the parser will wait to receive the complete HTTP headers, in milliseconds. (Default: `30e3` - 30 seconds)
     - `service.keepAliveMaxTimeout`: The maximum allowed keepAliveTimeout. (Default: `5e3` - 5 seconds)
@@ -84,6 +87,8 @@
       - `wsConnectionParams.failedConnectionCallback`: `Function` A function called after a `connection_error` message is received, the first argument contains the message payload.
       - `wsConnectionParams.failedReconnectCallback`: `Function` A function called if reconnect is enabled and maxReconnectAttempts is reached.
       - `wsConnectionParams.rewriteConnectionInitPayload`: `Function` A function that gets the original `connection_init` payload along with the context as a parameter and returns an object that replaces the original `connection_init` payload before forwarding it to the federated service
+  - `gateway.retryServicesCount`: `Number` Specifies the maximum number of retries when a service fails to start on gateway initialization. (Default: 10)
+  - `gateway.retryServicesInterval`: `Number` The amount of time(in milliseconds) between service retry attempts in case a service fails to start on gateway initialization. (Default: 3000)
 
 - `persistedQueries`: A hash/query map to resolve the full query text using it's unique hash. Overrides `persistedQueryProvider`.
 - `onlyPersisted`: Boolean. Flag to control whether to allow graphql queries other than persisted. When `true`, it'll make the server reject any queries that are not present in the `persistedQueries` option above. It will also disable any ide available (graphiql). Requires `persistedQueries` to be set, and overrides `persistedQueryProvider`.
@@ -537,25 +542,34 @@ app.listen(3000)
 To control the status code for the response, the third optional parameter can be used.
 
 ```js
+throw new mercurius.ErrorWithProps('Invalid User ID', {moreErrorInfo})
+// using the defaultErrorFormatter, the response statusCode will be 500 when there is a single error
 
-    throw new mercurius.ErrorWithProps('Invalid User ID', {moreErrorInfo})
-    // using de defaultErrorFormatter the response statusCode will be 500
+throw new mercurius.ErrorWithProps('Invalid User ID', {moreErrorInfo}, 200)
+// using the defaultErrorFormatter, the response statusCode will be 200 when there is a single error
 
-    throw new mercurius.ErrorWithProps('Invalid User ID', {moreErrorInfo}, 200)
-    // using de defaultErrorFormatter the response statusCode will be 200
-
-    const error = new mercurius.ErrorWithProps('Invalid User ID', {moreErrorInfo}, 500)
-    error.data = {foo: 'bar'} 
-    throw error
-    // using de defaultErrorFormatter the response status code will be always 200 because error.data is defined
-
-
+const error = new mercurius.ErrorWithProps('Invalid User ID', {moreErrorInfo}, 500)
+error.data = {foo: 'bar'}
+throw error
+// using the defaultErrorFormatter, the response status code will be always 200 because error.data is defined
 ```
 
 ### Error formatter
 
-Allows the status code of the response to be set, and a GraphQL response for the error to be defined. 
+Allows the status code of the response to be set, and a GraphQL response for the error to be defined. You find out how to do this [here](../http.md#custom-behaviour).
 
 By default uses the `defaultErrorFormatter`, but it can be overridden in the [mercurius options](/docs/api/options.md#plugin-options) changing the errorFormatter parameter.
 
 **Important**: *using the default formatter, when the error has a data property the response status code will be always 200*
+
+While using custom error formatter, you can access the status code provided by the ErrorWithProps object via
+`originalError` property. Please keep in mind though, that `originalError` is a non-enumerable property, meaning it won't
+get serialized and/or logged as a whole.
+
+```javascript
+app.register(mercurius, {
+    schema,
+    resolvers,
+    errorFormatter: (result) => ({ statusCode: result.errors[0].originalError.statusCode, response: result })
+})
+```

@@ -1,6 +1,7 @@
 'use strict'
 const { test } = require('tap')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 const WebSocket = require('ws')
 const fastify = require('fastify')
 const mq = require('mqemitter')
@@ -47,7 +48,7 @@ test('socket is closed on unhandled promise rejection in handleMessage', t => {
 
   app.listen(0, () => {
     const url = 'ws://localhost:' + (app.server.address()).port + '/graphql'
-    const ws = new WebSocket(url, 'graphql-ws')
+    const ws = new WebSocket(url, 'graphql-transport-ws')
     const client = WebSocket.createWebSocketStream(ws, { encoding: 'utf8', objectMode: true })
     t.teardown(client.destroy.bind(client))
 
@@ -74,7 +75,7 @@ test('subscription connection sends error message when message is not json strin
         payload: 'Message must be a JSON string'
       }), message)
     },
-    protocol: GRAPHQL_WS
+    protocol: GRAPHQL_TRANSPORT_WS
   }, {})
 
   await sc.handleMessage('invalid json string')
@@ -86,7 +87,7 @@ test('subscription connection handles GQL_CONNECTION_TERMINATE message correctly
     on () {},
     close () { t.pass() },
     send (message) {},
-    protocol: GRAPHQL_WS
+    protocol: GRAPHQL_TRANSPORT_WS
   }, {})
 
   await sc.handleMessage(JSON.stringify({
@@ -203,7 +204,7 @@ test('handles error in send and closes connection', async t => {
         t.pass()
       },
       on () {},
-      protocol: GRAPHQL_WS
+      protocol: GRAPHQL_TRANSPORT_WS
     },
     {}
   )
@@ -256,7 +257,7 @@ test('subscription connection send error message when GQL_START handler errs', a
         payload: 'handleGQLStart error'
       }), message)
     },
-    protocol: GRAPHQL_WS
+    protocol: GRAPHQL_TRANSPORT_WS
   }, {})
 
   sc.isReady = true
@@ -267,7 +268,7 @@ test('subscription connection send error message when GQL_START handler errs', a
 
   await sc.handleMessage(JSON.stringify({
     id: 1,
-    type: 'start',
+    type: 'subscribe',
     payload: { }
   }))
 })
@@ -285,7 +286,7 @@ test('subscription connection send error message when client message type is inv
         payload: 'Invalid payload type'
       }), message)
     },
-    protocol: GRAPHQL_WS
+    protocol: GRAPHQL_TRANSPORT_WS
   }, {})
 
   await sc.handleMessage(JSON.stringify({
@@ -295,7 +296,7 @@ test('subscription connection send error message when client message type is inv
   }))
 })
 
-test('subscription connection handles GQL_START message correctly, when payload.query is not defined', async (t) => {
+test('subscription connection handles GQL_START message correctly, when payload.query is not defined', (t) => {
   t.plan(1)
 
   const sc = new SubscriptionConnection({
@@ -306,14 +307,14 @@ test('subscription connection handles GQL_START message correctly, when payload.
         { type: 'error', id: 1, payload: 'Must provide document.' }
       ), message)
     },
-    protocol: GRAPHQL_WS
+    protocol: GRAPHQL_TRANSPORT_WS
   }, {})
 
   sc.isReady = true
 
-  await sc.handleMessage(JSON.stringify({
+  sc.handleMessage(JSON.stringify({
     id: 1,
-    type: 'start',
+    type: 'subscribe',
     payload: { }
   }))
 })
@@ -329,12 +330,12 @@ test('subscription connection handles when GQL_START is called before GQL_INIT',
         { type: 'connection_error', payload: { message: 'Connection has not been established yet.' } }
       ), message)
     },
-    protocol: GRAPHQL_WS
+    protocol: GRAPHQL_TRANSPORT_WS
   }, {})
 
   await sc.handleMessage(JSON.stringify({
     id: 1,
-    type: 'start',
+    type: 'subscribe',
     payload: { }
   }))
 })
@@ -352,7 +353,7 @@ test('subscription connection extends context with onConnect return value', asyn
     send (message) {
       t.equal(JSON.stringify({ type: 'connection_ack' }), message)
     },
-    protocol: GRAPHQL_WS
+    protocol: GRAPHQL_TRANSPORT_WS
   }, {
     context,
     onConnect: function () {
@@ -378,7 +379,7 @@ test('subscription connection send GQL_ERROR message if connectionInit extension
         payload: 'Forbidden'
       })
     },
-    protocol: GRAPHQL_WS
+    protocol: GRAPHQL_TRANSPORT_WS
   }, {
     onConnect: function () {
       throw new Error('Not allowed')
@@ -390,10 +391,13 @@ test('subscription connection send GQL_ERROR message if connectionInit extension
     }
   })
 
+  // TODO FIXME? This case doesn't seem to be allowed by the protocol: https://github.com/enisdenjo/graphql-ws/blob/master/PROTOCOL.md#connectioninit
+  // When onConnect returns a "falsy" value then it CANNOT be "ready", it should just deny the connection.
+  // However, this is an "extension"; if it's valid, perhaps should be better documented?
   sc.isReady = true
   await sc.handleMessage(JSON.stringify({
     id: 1,
-    type: 'start',
+    type: 'subscribe',
     payload: {},
     extensions: [
       { type: 'connectionInit' }
@@ -406,7 +410,7 @@ test('subscription connection does not create subscription if connectionInit ext
     on () { },
     close () { },
     send (message) {},
-    protocol: GRAPHQL_WS
+    protocol: GRAPHQL_TRANSPORT_WS
   }, {
     onConnect: function () {
       throw new Error('Not allowed')
@@ -421,7 +425,7 @@ test('subscription connection does not create subscription if connectionInit ext
   sc.isReady = true
   await sc.handleMessage(JSON.stringify({
     id: 1,
-    type: 'start',
+    type: 'subscribe',
     payload: {},
     extensions: [
       { type: 'connectionInit' }
@@ -444,13 +448,16 @@ test('subscription connection send GQL_ERROR on unknown extension', async (t) =>
         payload: 'Unknown extension unknown'
       })
     },
-    protocol: GRAPHQL_WS
+    protocol: GRAPHQL_TRANSPORT_WS
   }, { })
 
   sc.isReady = true
+  // TODO FIXME? This case doesn't seem to be allowed by the protocol: https://github.com/enisdenjo/graphql-ws/blob/master/PROTOCOL.md#subscribe
+  // When type is "Subscribe", the `payload` cannot be empty (the `query` prop is required).
+  // However, this is an "extension"; if it's valid, perhaps should be better documented?
   await sc.handleMessage(JSON.stringify({
     id: 1,
-    type: 'start',
+    type: 'subscribe',
     payload: {},
     extensions: [
       { type: 'unknown' }
@@ -468,7 +475,7 @@ test('subscription connection handleConnectionInitExtension returns the onConnec
     on () { },
     close () { },
     send (message) { },
-    protocol: GRAPHQL_WS
+    protocol: GRAPHQL_TRANSPORT_WS
   }, {
     onConnect: function () {
       return onConnectResult
@@ -494,10 +501,145 @@ test('subscription connection extends the context with the connection_init paylo
     on () { },
     close () { },
     send (message) { },
-    protocol: GRAPHQL_WS
+    protocol: GRAPHQL_TRANSPORT_WS
   }, {})
 
   await sc.handleConnectionInit({ type: 'connection_init', payload: connectionInitPayload })
 
   t.same(sc.context._connectionInit, connectionInitPayload)
+})
+
+test('subscription connection sends error when trying to execute invalid operations via WS', async (t) => {
+  t.plan(1)
+
+  const sc = new SubscriptionConnection(
+    {
+      on () {},
+      send (message) {
+        t.equal(
+          JSON.stringify({
+            type: 'error',
+            id: 1,
+            payload: 'Invalid operation: query'
+          }),
+          message
+        )
+      },
+      protocol: GRAPHQL_TRANSPORT_WS
+    },
+    {}
+  )
+
+  sc.isReady = true
+  await sc.handleMessage(
+    JSON.stringify({
+      id: 1,
+      type: 'subscribe',
+      payload: {
+        query: 'query { __typename }'
+      }
+    })
+  )
+})
+
+test('subscription connection handles query when fullWsTransport: true', async (t) => {
+  const send = sinon.stub()
+
+  const sc = new SubscriptionConnection(
+    {
+      on () {},
+      send,
+      protocol: GRAPHQL_TRANSPORT_WS
+    },
+    {
+      fastify: {
+        graphql: () => {
+          return {}
+        }
+      },
+      fullWsTransport: true
+    }
+  )
+
+  sc.isReady = true
+
+  await sc.handleMessage(
+    JSON.stringify({
+      id: 1,
+      type: 'subscribe',
+      payload: {
+        query: 'query { __typename }'
+      }
+    })
+  )
+
+  t.ok(
+    send.withArgs(
+      JSON.stringify({
+        type: 'next',
+        id: 1,
+        payload: {}
+      })
+    ).calledOnce
+  )
+  t.ok(
+    send.withArgs(
+      JSON.stringify({
+        type: 'complete',
+        id: 1,
+        payload: null
+      })
+    ).calledOnce
+  )
+})
+
+test('subscription connection handles mutation when fullWsTransport: true', async (t) => {
+  const send = sinon.stub()
+
+  const sc = new SubscriptionConnection(
+    {
+      on () {},
+      send,
+      protocol: GRAPHQL_TRANSPORT_WS
+    },
+    {
+      fastify: {
+        graphql: () => {
+          return {}
+        }
+      },
+      fullWsTransport: true
+    }
+  )
+
+  sc.isReady = true
+
+  await sc.handleMessage(
+    JSON.stringify({
+      id: 1,
+      type: 'subscribe',
+      payload: {
+        query: 'mutation { __typename }'
+      }
+    })
+  )
+
+  t.ok(
+    send.withArgs(
+      JSON.stringify({
+        type: 'next',
+        id: 1,
+        payload: {}
+      })
+    ).calledOnce
+  )
+  t.ok(
+    send.withArgs(
+      JSON.stringify({
+        type: 'complete',
+        id: 1,
+        payload: null
+      })
+    ).calledOnce
+  )
 })

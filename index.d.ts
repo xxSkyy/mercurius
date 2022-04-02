@@ -227,7 +227,7 @@ interface ServiceConfig {
 }
 
 interface Gateway {
-  refresh: () => Promise<GraphQLSchema | null>;
+  refresh: (isRetry?: boolean) => Promise<GraphQLSchema | null>;
   serviceMap: Record<string, ServiceConfig>;
 }
 
@@ -387,6 +387,7 @@ export interface MercuriusGatewayService {
   initHeaders?: (() => OutgoingHttpHeaders | Promise<OutgoingHttpHeaders>) | OutgoingHttpHeaders;
   rewriteHeaders?: <TContext extends MercuriusContext = MercuriusContext>(headers: IncomingHttpHeaders, context: TContext) => OutgoingHttpHeaders;
   connections?: number;
+  keepAlive?: number;
   keepAliveMaxTimeout?: number;
   rejectUnauthorized?: boolean;
   wsConnectionParams?:
@@ -401,7 +402,9 @@ export interface MercuriusGatewayOptions {
   gateway: {
     services: Array<MercuriusGatewayService>;
     pollingInterval?: number;
-    errorHandler?(error: Error, service: MercuriusGatewayService): void
+    errorHandler?(error: Error, service: MercuriusGatewayService): void;
+    retryServicesCount?: number;
+    retryServicesInterval?: number;
   };
 }
 
@@ -470,7 +473,7 @@ export interface MercuriusCommonOptions {
   /**
    * Change the default error formatter.
    */
-  errorFormatter?: <TContext extends Record<string,any> = MercuriusContext>(
+  errorFormatter?: <TContext extends MercuriusContext = MercuriusContext>(
     execution: ExecutionResult,
     context: TContext
   ) => {
@@ -516,6 +519,8 @@ export interface MercuriusCommonOptions {
           payload: any;
         }) => Record<string, any> | Promise<Record<string, any>>;
         onDisconnect?: (context: MercuriusContext) => void | Promise<void>;
+        keepAlive?: number,
+        fullWsTransport?: boolean,
       };
   /**
    * Enable federation metadata support so the service can be deployed behind an Apollo Gateway
@@ -613,8 +618,8 @@ declare namespace mercurius {
    * Default error formatter.
    */
   const defaultErrorFormatter: (
-    execution: ExecutionResult,
-    context: any
+    execution: ExecutionResult | Error,
+    context: MercuriusContext
   ) => { statusCode: number; response: ExecutionResult };
 
   /**

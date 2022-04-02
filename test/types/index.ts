@@ -323,6 +323,55 @@ gateway.register(mercurius, {
   }
 })
 
+// keepAlive value in service config
+gateway.register(mercurius, {
+  gateway: {
+    services: [
+      {
+        name: 'user',
+        url: 'http://localhost:4001/graphql',
+        schema: `
+        type Query {
+          dogs: [Dog]
+        }`,
+        keepAlive: 3000
+      }
+    ]
+  }
+})
+
+expectError(() => gateway.register(mercurius, {
+  gateway: {
+    services: [
+      {
+        name: 'user',
+        url: 'http://localhost:4001/graphql',
+        schema: `
+        type Query {
+          dogs: [Dog]
+        }`,
+        keepAlive: true
+      }
+    ]
+  }
+}))
+
+expectError(() => gateway.register(mercurius, {
+  gateway: {
+    services: [
+      {
+        name: 'user',
+        url: 'http://localhost:4001/graphql',
+        schema: `
+        type Query {
+          dogs: [Dog]
+        }`,
+        keepAlive: 'yes'
+      }
+    ]
+  }
+}))
+
 // Gateway mode with load balanced services
 gateway.register(mercurius, {
   gateway: {
@@ -338,6 +387,33 @@ gateway.register(mercurius, {
     ]
   }
 })
+
+// Gateway mode with custom services retry props
+gateway.register(mercurius, {
+  gateway: {
+    services: [
+      {
+        name: 'user',
+        url: 'http://localhost:4001/graphql'
+      }
+    ],
+    retryServicesCount: 30,
+    retryServicesInterval: 5000
+  }
+})
+
+expectError(() => gateway.register(mercurius, {
+  gateway: {
+    services: [
+      {
+        name: 'user',
+        url: 'http://localhost:4001/graphql'
+      }
+    ],
+    retryServicesCount: '30',
+    retryServicesInterval: '5000'
+  }
+}))
 
 // Executable schema
 
@@ -414,6 +490,14 @@ app.register(mercurius, {
   resolvers,
   subscription: {
     emitter
+  }
+})
+
+app.register(mercurius, {
+  schema: schema,
+  resolvers,
+  subscription: {
+    fullWsTransport: true
   }
 })
 
@@ -629,3 +713,15 @@ declare module 'fastify' {
     graphql: MercuriusPlugin
   }
 }
+
+mercurius.defaultErrorFormatter({}, {} as MercuriusContext)
+
+mercurius.defaultErrorFormatter(new Error('test error'), {} as MercuriusContext)
+
+expectError(() => {
+  return mercurius.defaultErrorFormatter({}, null)
+})
+
+expectError(() => {
+  return mercurius.defaultErrorFormatter({}, undefined)
+})
