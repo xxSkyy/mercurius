@@ -55,11 +55,11 @@ test('onGatewayReplaceSchema - polling interval with a new schema should trigger
         name: String!
       }
     `,
-    resolvers: resolvers,
+    resolvers,
     federationMetadata: true
   })
 
-  await userService.listen(0)
+  await userService.listen({ port: 0 })
 
   const userServicePort = userService.server.address().port
 
@@ -145,11 +145,11 @@ test('onGatewayReplaceSchema - should log an error should any errors occur in th
         name: String!
       }
     `,
-    resolvers: resolvers,
+    resolvers,
     federationMetadata: true
   })
 
-  await userService.listen(0)
+  await userService.listen({ port: 0 })
 
   const userServicePort = userService.server.address().port
 

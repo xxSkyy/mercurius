@@ -3,7 +3,7 @@
 const fp = require('fastify-plugin')
 const LRU = require('tiny-lru')
 const routes = require('./lib/routes')
-const { compileQuery } = require('graphql-jit')
+const { compileQuery, isCompiledQuery } = require('graphql-jit')
 const { Factory } = require('single-user-cache')
 const {
   parse,
@@ -151,6 +151,25 @@ const plugin = fp(async function (app, opts) {
     throw new MER_ERR_INVALID_OPTS('Adding "schema", "resolvers" or "loaders" to plugin options when plugin is running in gateway mode is not allowed')
   }
 
+  if (gateway && Array.isArray(gateway.services)) {
+    const serviceNames = new Set()
+    for (const service of gateway.services) {
+      if (typeof service !== 'object') {
+        throw new MER_ERR_INVALID_OPTS('gateway: all "services" must be objects')
+      }
+      if (typeof service.name !== 'string') {
+        throw new MER_ERR_INVALID_OPTS('gateway: all "services" must have a "name" String property')
+      }
+      if (serviceNames.has(service.name)) {
+        throw new MER_ERR_INVALID_OPTS(`gateway: all "services" must have a unique "name": "${service.name}" is already used`)
+      }
+      serviceNames.add(service.name)
+      if (typeof service.url !== 'string' && (!Array.isArray(service.url) || service.url.length === 0 || !service.url.every(url => typeof url === 'string'))) {
+        throw new MER_ERR_INVALID_OPTS('gateway: all "services" must have an "url" String, or a non-empty Array of String, property')
+      }
+    }
+  }
+
   if (Array.isArray(schema)) {
     schema = schema.join('\n')
   }
@@ -169,9 +188,9 @@ const plugin = fp(async function (app, opts) {
       }),
       mutation: opts.defineMutation
         ? new GraphQLObjectType({
-            name: 'Mutation',
-            fields: {}
-          })
+          name: 'Mutation',
+          fields: {}
+        })
         : undefined
     })
   }
@@ -194,6 +213,7 @@ const plugin = fp(async function (app, opts) {
 
         const context = assignApplicationLifecycleHooksToContext({}, fastifyGraphQl[kHooks])
         const schema = await gateway.refresh(isRetry)
+        /* istanbul ignore next */
         if (schema !== null) {
           clearInterval(gatewayRetryIntervalTimer)
           // Trigger onGatewayReplaceSchema hook
@@ -358,6 +378,9 @@ const plugin = fp(async function (app, opts) {
       throw new MER_ERR_GQL_GATEWAY('Calling defineResolvers method when plugin is running in gateway mode is not allowed')
     }
 
+    const subscriptionTypeName = (schema.getSubscriptionType() || {}).name || 'Subscription'
+    const subscriptionsActive = !!fastifyGraphQl.pubsub
+
     for (const name of Object.keys(resolvers)) {
       const type = fastifyGraphQl.schema.getType(name)
 
@@ -371,7 +394,7 @@ const plugin = fp(async function (app, opts) {
           delete resolver.isTypeOf
         }
         for (const prop of Object.keys(resolver)) {
-          if (name === 'Subscription') {
+          if (subscriptionsActive && name === subscriptionTypeName) {
             fields[prop] = {
               ...fields[prop],
               ...resolver[prop]
@@ -619,7 +642,7 @@ const plugin = fp(async function (app, opts) {
       }
     }
 
-    if (cached && cached.jit !== null && !modifiedSchema && !modifiedDocument) {
+    if (cached && cached.jit !== null && !modifiedSchema && !modifiedDocument && isCompiledQuery(cached.jit)) {
       const execution = await cached.jit.query(root, context, variables || {})
       return maybeFormatErrors(execution, context)
     }
@@ -657,7 +680,7 @@ const plugin = fp(async function (app, opts) {
   }
 }, {
   name: 'mercurius',
-  fastify: '>=3.x'
+  fastify: '4.x'
 })
 
 plugin.ErrorWithProps = ErrorWithProps

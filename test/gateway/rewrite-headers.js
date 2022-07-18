@@ -12,7 +12,7 @@ async function createTestService (schema, resolvers = {}, hooks = {}) {
     service.addHook(hookName, handler)
   })
 
-  await service.listen(0)
+  await service.listen({ port: 0 })
   return [service, service.server.address().port]
 }
 
@@ -92,7 +92,7 @@ test('gateway - service rewriteHeaders', async (t) => {
       await users.close()
     })
 
-    const rewriteHeaders = () => ({ 'x-custom': custom })
+    const rewriteHeaders = async () => ({ 'x-custom': custom })
     const url = `http://localhost:${usersPort}/graphql`
     gateway.register(GQL, { gateway: { services: [{ name: 'user', url, rewriteHeaders }] } })
 

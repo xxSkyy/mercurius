@@ -132,7 +132,7 @@ test('subscription - hooks basic', async t => {
     t.ok('onSubscriptionResolution called')
   })
 
-  await app.listen(0)
+  await app.listen({ port: 0 })
 
   const { client } = createWebSocketClient(t, app)
 
@@ -193,7 +193,7 @@ test('subscription - should handle preSubscriptionParsing hook errors', async t 
     t.fail('onSubscriptionResolution should not be called')
   })
 
-  await app.listen(0)
+  await app.listen({ port: 0 })
 
   const { client } = createWebSocketClient(t, app)
 
@@ -243,7 +243,7 @@ test('subscription - should handle preSubscriptionExecution hook errors', async 
     t.fail('onSubscriptionResolution should not be called')
   })
 
-  await app.listen(0)
+  await app.listen({ port: 0 })
 
   const { client } = createWebSocketClient(t, app)
 
@@ -291,7 +291,7 @@ test('subscription - should handle onSubscriptionResolution hook errors', async 
     t.fail('onSubscriptionResolution should not be called agin')
   })
 
-  await app.listen(0)
+  await app.listen({ port: 0 })
 
   const { client, ws } = createWebSocketClient(t, app)
 
@@ -302,7 +302,7 @@ test('subscription - should handle onSubscriptionResolution hook errors', async 
     id: 1,
     type: 'start',
     payload: {
-      query: query
+      query
     }
   }))
 
@@ -330,7 +330,7 @@ test('subscription - should call onSubscriptionEnd when subscription ends', asyn
     t.ok('onSubscriptionEnd called')
   })
 
-  await app.listen(0)
+  await app.listen({ port: 0 })
 
   const { client } = createWebSocketClient(t, app)
 
@@ -341,7 +341,7 @@ test('subscription - should call onSubscriptionEnd when subscription ends', asyn
     id: 1,
     type: 'start',
     payload: {
-      query: query
+      query
     }
   }))
 
@@ -371,7 +371,7 @@ test('subscription - should handle onSubscriptionEnd hook errors', async t => {
     throw new Error('kaboom')
   })
 
-  await app.listen(0)
+  await app.listen({ port: 0 })
 
   const { client, ws } = createWebSocketClient(t, app)
 
@@ -382,7 +382,7 @@ test('subscription - should handle onSubscriptionEnd hook errors', async t => {
     id: 1,
     type: 'start',
     payload: {
-      query: query
+      query
     }
   }))
 

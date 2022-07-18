@@ -13,7 +13,7 @@ import {
   GraphQLScalarType,
   ValidationRule,
 } from "graphql";
-import { SocketStream } from "fastify-websocket"
+import { SocketStream } from "@fastify/websocket"
 import { IncomingMessage, IncomingHttpHeaders, OutgoingHttpHeaders } from "http";
 import { Readable } from "stream";
 
@@ -210,7 +210,7 @@ export interface onSubscriptionEndHookHandler<TContext = MercuriusContext> {
 // ----------------------------
 
 /**
- * `onGatewayReplaceSchema` is an application lifeycle hook. When the Gateway service obtains new versions of federated schemas within a defined polling interval, the `onGatewayReplaceSchema` hook will be triggered every time a new schema is built. It is called just before the old schema is replaced with the new one.
+ * `onGatewayReplaceSchema` is an application lifecycle hook. When the Gateway service obtains new versions of federated schemas within a defined polling interval, the `onGatewayReplaceSchema` hook will be triggered every time a new schema is built. It is called just before the old schema is replaced with the new one.
  * This hook will only be triggered in gateway mode. It has the following parameters:
  *  - `instance` - The gateway server `FastifyInstance` (this contains the old schema).
  *  - `schema` - The new schema that has been built from the gateway refresh.
@@ -351,7 +351,7 @@ export interface MercuriusPlugin {
   // Application lifecycle addHooks
 
   /**
-   * `onGatewayReplaceSchema` is an application lifeycle hook. When the Gateway service obtains new versions of federated schemas within a defined polling interval, the `onGatewayReplaceSchema` hook will be triggered every time a new schema is built. It is called just before the old schema is replaced with the new one.
+   * `onGatewayReplaceSchema` is an application lifecycle hook. When the Gateway service obtains new versions of federated schemas within a defined polling interval, the `onGatewayReplaceSchema` hook will be triggered every time a new schema is built. It is called just before the old schema is replaced with the new one.
    * This hook will only be triggered in gateway mode. It has the following parameters:
    *  - `instance` - The gateway server `FastifyInstance` (this contains the old schema).
    *  - `schema` - The new schema that has been built from the gateway refresh.
@@ -384,8 +384,13 @@ export interface MercuriusGatewayService {
   schema?: string;
   wsUrl?: string;
   mandatory?: boolean;
-  initHeaders?: (() => OutgoingHttpHeaders | Promise<OutgoingHttpHeaders>) | OutgoingHttpHeaders;
-  rewriteHeaders?: <TContext extends MercuriusContext = MercuriusContext>(headers: IncomingHttpHeaders, context: TContext) => OutgoingHttpHeaders;
+  initHeaders?:
+    | (() => OutgoingHttpHeaders | Promise<OutgoingHttpHeaders>)
+    | OutgoingHttpHeaders;
+  rewriteHeaders?: <TContext extends MercuriusContext = MercuriusContext>(
+    headers: IncomingHttpHeaders,
+    context: TContext
+  ) => OutgoingHttpHeaders | Promise<OutgoingHttpHeaders>;
   connections?: number;
   keepAlive?: number;
   keepAliveMaxTimeout?: number;
@@ -393,6 +398,7 @@ export interface MercuriusGatewayService {
   wsConnectionParams?:
     | (() => WsConnectionParams | Promise<WsConnectionParams>)
     | WsConnectionParams;
+  setResponseHeaders?: (reply:FastifyReply) => void;
 }
 
 export interface MercuriusGatewayOptions {

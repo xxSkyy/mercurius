@@ -57,7 +57,7 @@ declare module '../../' {
 }
 
 app.register(mercurius, {
-  schema: schema,
+  schema,
   resolvers,
   loaders: {},
   ide: false,
@@ -83,7 +83,7 @@ app.register(mercurius, {
 })
 
 app.register(mercurius, {
-  schema: schema,
+  schema,
   resolvers,
   loaders: {},
   ide: false,
@@ -323,6 +323,29 @@ gateway.register(mercurius, {
   }
 })
 
+// Async rewriteHeaders
+gateway.register(mercurius, {
+  gateway: {
+    services: [
+      {
+        name: 'user',
+        url: 'http://localhost:4001/graphql',
+        schema: `
+        type Query {
+          dogs: [Dog]
+        }`,
+        keepAlive: 3000,
+        rewriteHeaders: async (headers, context) => {
+          const sessionId = await Promise.resolve('12')
+          return {
+            sessionId
+          }
+        }
+      }
+    ]
+  }
+})
+
 // keepAlive value in service config
 gateway.register(mercurius, {
   gateway: {
@@ -339,6 +362,38 @@ gateway.register(mercurius, {
     ]
   }
 })
+
+gateway.register(mercurius, {
+  gateway: {
+    services: [
+      {
+        name: 'user',
+        url: 'http://localhost:4001/graphql',
+        schema: `
+        type Query {
+          dogs: [Dog]
+        }`,
+        setResponseHeaders: (reply) => reply.header('abc', 'abc')
+      }
+    ]
+  }
+})
+
+expectError(() => gateway.register(mercurius, {
+  gateway: {
+    services: [
+      {
+        name: 'user',
+        url: 'http://localhost:4001/graphql',
+        schema: `
+        type Query {
+          dogs: [Dog]
+        }`,
+        setResponseHeaders: false
+      }
+    ]
+  }
+}))
 
 expectError(() => gateway.register(mercurius, {
   gateway: {
@@ -429,7 +484,7 @@ gateway.register(mercurius, {
 // Subscriptions
 
 app.register(mercurius, {
-  schema: schema,
+  schema,
   resolvers,
   subscription: true
 })
@@ -437,7 +492,7 @@ app.register(mercurius, {
 const emitter = mq()
 
 app.register(mercurius, {
-  schema: schema,
+  schema,
   resolvers,
   subscription: {
     emitter,
@@ -469,7 +524,7 @@ app.register(mercurius, {
 })
 
 app.register(mercurius, {
-  schema: schema,
+  schema,
   resolvers,
   subscription: {
     context: async (connection, request) => {
@@ -486,7 +541,7 @@ app.register(mercurius, {
 })
 
 app.register(mercurius, {
-  schema: schema,
+  schema,
   resolvers,
   subscription: {
     emitter
@@ -494,7 +549,7 @@ app.register(mercurius, {
 })
 
 app.register(mercurius, {
-  schema: schema,
+  schema,
   resolvers,
   subscription: {
     fullWsTransport: true
@@ -589,7 +644,7 @@ class CustomPubSub {
 }
 
 app.register(mercurius, {
-  schema: schema,
+  schema,
   resolvers,
   subscription: {
     pubsub: new CustomPubSub()
